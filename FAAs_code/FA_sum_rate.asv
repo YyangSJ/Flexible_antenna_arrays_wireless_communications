@@ -1,0 +1,91 @@
+clear all;
+close all;
+rng(2024)
+f=10e9;lambda=3e8/f;
+d=lambda/2;
+Nh=4; % horizontal antenna number
+Nv=4; % vertical antenna number
+y_UPA=[-(Nh-1)/2:(Nh-1)/2]*d;
+z_UPA=[-(Nv-1)/2:(Nv-1)/2]*d;
+ 
+x_USCA=-x_USCA;
+z_USCA=z_UPA;
+
+PSI=pi/800:pi/800:pi/4;
+realization=12;
+K=16
+L=12
+sigma=1;
+PP=sqrt(10.^((-15:5:20)/10));
+for reali=1:realization
+    alpha=1/sqrt(2)*(normrnd(0,1,K,L)+1i*normrnd(0,1,K,L));
+    theta=unifrnd(0,pi,L,K);
+    phi=unifrnd(-pi/3,pi/3,L,K);
+    for i=1:length(PSI)
+        psi=PSI(i);
+        y_FBA=(Nh-1)*d/2/psi*sin(psi*y_UPA/((Nh-1)*d/2));
+        x_FBA=(Nh-1)*d/2/psi-(Nh-1)*d/2/psi*cos(psi*y_UPA/((Nh-1)*d/2));
+        x_FBA=-x_FBA;
+        z_FBA=z_UPA;
+        H_UPA=zeros(Nh*Nv,K);H_FBA=zeros(Nh*Nv,K); 
+        for k=1:K
+            for l=1:L
+                for ny=1:Nh
+                    psi_ny=2*psi/(Nh-1)*(ny-1)-psi;
+                    psi_ny_usca=pi/(Nh-1)*(ny-1)-pi/2;
+                    for nz=1:Nv
+                        r_upa(ny,nz)=(y_UPA(ny)*sin(phi(l,k))*sin(theta(l,k))+z_UPA(nz)*cos(theta(l,k)));
+                        r_cyl(ny,nz)=(x_FBA(ny)*cos(phi(l,k))*sin(theta(l,k))+y_FBA(ny)*sin(phi(l,k))*sin(theta(l,k))+z_FBA(nz)*cos(theta(l,k)));
+                         er_upa(ny,nz)=exp(-1i*2*pi/lambda*r_upa(ny,nz))*ANT_RADIATION(theta(l,k),phi(l,k));
+                        er_cyl(ny,nz)=exp(-1i*2*pi/lambda*r_cyl(ny,nz))*ANT_RADIATION(theta(l,k),phi(l,k)-psi_ny);
+                      end
+                end
+                r_eupav=er_upa(:); r_ecylv=er_cyl(:); 
+                H_UPA(:,k)=H_UPA(:,k)+1/sqrt(L)*alpha(k,l)*r_eupav;
+                H_FBA(:,k)=H_FBA(:,k)+1/sqrt(L)*alpha(k,l)*r_ecylv; 
+            end
+        end
+        H_UPA=H_UPA';
+        H_FBA=H_FBA';
+        H_USCA=H_USCA';
+        F_UPA=H_UPA'*inv(H_UPA*H_UPA'+1e-6);
+        F_FBA=H_FBA'*inv(H_FBA*H_FBA'+1e-6); 
+ 
+        for k=1:K
+            F_UPA(:,k)= F_UPA(:,k)/norm( F_UPA(:,k));
+            F_FBA(:,k)= F_FBA(:,k)/norm( F_FBA(:,k)); 
+        end
+        for p=1:length(PP)
+            P=PP(p)^2; 
+            [~,rate_UPA(reali,p),rate_UPA_wo_WF(reali,p)]=WF(H_UPA',F_UPA,K,K,sigma,P);
+            [~,rate_FBA_temp(i,p),rate_FBA_temp_wo_WF(i,p)]=WF(H_FBA',F_FBA,K,K,sigma,P); 
+        end
+    end
+    [rate_FBA(reali,:),~]=max(rate_FBA_temp);
+     [rate_FBA_wo_WF(reali,:),~]=max(rate_FBA_temp_wo_WF);
+end
+rate_UPA_mean=mean(rate_UPA,1)
+rate_FBA_mean=mean(rate_FBA,1)
+rate_USCA_mean=mean(rate_USCA,1)
+rate_UPA_wo_WF_mean=mean(rate_UPA_wo_WF,1)
+rate_FBA_wo_WF_mean=mean(rate_FBA_wo_WF,1)
+rate_USCA_wo_WF_mean=mean(rate_USCA_wo_WF,1)
+% rate_UPA_min_mean=mean(rate_UPA_min,1)
+% rate_FBA_min_mean=mean(rate_FBA_min,1) 
+figure
+plot(-15:5:20,rate_UPA_mean,'-r')
+hold on
+plot(-15:5:20,rate_FBA_mean,'-black')
+hold on
+plot(-15:5:20,rate_USCA_mean,'-b')
+hold on
+plot(-15:5:20,rate_UPA_wo_WF_mean,'--r')
+hold on
+plot(-15:5:20,rate_FBA_wo_WF_mean,'--black')
+hold on
+plot(-15:5:20,rate_USCA_wo_WF_mean,'--b')
+grid on 
+% figure
+% plot(-15:5:20,rate_UPA_min_mean)
+% hold on
+% plot(-15:5:20,rate_FBA_min_mean)
